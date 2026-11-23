@@ -1,279 +1,181 @@
-<div align="center">
+# VectorView: searching animal photos with CLIP embeddings
 
-<br/>
+![Python](https://img.shields.io/badge/Python-3.15-blue?style=flat-square&logo=python)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.15-ee4c2c?style=flat-square&logo=pytorch&logoColor=white)
+![CLIP](https://img.shields.io/badge/OpenAI-CLIP-412991?style=flat-square)
+![Hugging Face](https://img.shields.io/badge/Transformers-5.24-yellow?style=flat-square&logo=huggingface&logoColor=black)
 
-```
- /$$    /$$                      /$$                         /$$    /$$ /$$                        
-| $$   | $$                     | $$                        | $$   | $$|__/                        
-| $$   | $$ /$$$$$$   /$$$$$$$ /$$$$$$    /$$$$$$   /$$$$$$ | $$   | $$ /$$  /$$$$$$  /$$  /$$  /$$
-|  $$ / $$//$$__  $$ /$$_____/|_  $$_/   /$$__  $$ /$$__  $$|  $$ / $$/| $$ /$$__  $$| $$ | $$ | $$
- \  $$ $$/| $$$$$$$$| $$        | $$    | $$  \ $$| $$  \__/ \  $$ $$/ | $$| $$$$$$$$| $$ | $$ | $$
-  \  $$$/ | $$_____/| $$        | $$ /$$| $$  | $$| $$        \  $$$/  | $$| $$_____/| $$ | $$ | $$
-   \  $/  |  $$$$$$$|  $$$$$$$  |  $$$$/|  $$$$$$/| $$         \  $/   | $$|  $$$$$$$|  $$$$$/$$$$/
-    \_/    \_______/ \_______/   \___/   \______/ |__/          \_/    |__/ \_______/ \_____/\___/ 
-                                                                                                   
-```
+> **Headline:** on 500 animal photos, CLIP embeddings plus nearest-neighbour search classify **98.8% of images correctly (494 of 500) with no trained classifier**, and plain text prompts alone reach **99.0%**. Image-to-image retrieval returns a same-class image in the top 5 at a precision of 0.978 (random ranking: 0.096).
 
-### _View the world through vectors._
+## Problem statement
 
-<br/>
+Keyword search cannot find things that merely *look* alike, and labelling every new image by hand does not scale. A team with a photo catalogue (a shop, a media archive, a wildlife survey) wants to:
 
-![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![CLIP](https://img.shields.io/badge/OpenAI-CLIP-412991?style=for-the-badge&logo=openai&logoColor=white)
-![Pinecone](https://img.shields.io/badge/Pinecone-Vector_DB-00BF63?style=for-the-badge&logo=pinecone&logoColor=white)
-![MongoDB](https://img.shields.io/badge/MongoDB-Atlas_Search-47A248?style=for-the-badge&logo=mongodb&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge)
+1. **find images similar to a given image**,
+2. **label a new image from the labels of its nearest neighbours**, without training a model, and
+3. **find images by typing a sentence**.
 
-<br/>
+CLIP embeds images and text into one shared vector space, so all three become the same operation: nearest-neighbour search by cosine similarity. This project builds the three searches and, more importantly, **measures** how well they work, because "it looks right on a few examples" is not evidence.
 
-> **Multi-modal vector search engine — image similarity, zero-shot KNN classification, and text-to-image retrieval powered by CLIP embeddings.**
+It started as Lab 14 of the Database Lab (Spring 2026), which defined the three tasks around a vector database. This repository adds the evaluation: ranking metrics, a confusion matrix, zero-shot classification, and a comparison of two CLIP models.
 
-<br/>
+## Data
 
----
+| Property | Detail |
+|---|---|
+| Dataset | The Animal Image Dataset used in the lab: `data/animal_dataset.zip` |
+| Size | 500 images, RGB, 120x80 to 300x300 pixels |
+| Classes | 10, with 50 images each: Butterfly, Cat, Chicken, Cow, Dog, Elephant, Horse, Sheep, Spider, Squirrel |
+| Quality checks | No duplicate files and no byte-identical images (checked in the notebook) |
+| Source and licence | **Not recorded in this repo.** The images are web photos and some carry third-party watermarks, so treat the dataset as coursework material |
 
-</div>
+## Methodology
 
-
-## ✦ What is VectorView?
-
-VectorView is a **multi-modal vector search system** that converts raw images and natural language into high-dimensional embeddings using OpenAI's **CLIP model** — then stores, indexes, and retrieves them via **Pinecone** and **MongoDB Atlas Vector Search**.
-
-No supervised training. No labeled pipelines. Just embeddings and geometry.
-
-```
-You give it: "A Running Dog"
-It returns: 🐶🐕— the closest matching images in the dataset
+```text
+ image  --CLIP image encoder-->  512-d vector --\
+                                                 +--> cosine similarity --> top-K neighbours
+ text   --CLIP text encoder--->  512-d vector --/                              |
+                                                          Task 1: show the neighbours
+                                                          Task 2: majority vote of their labels
+                                                          Task 3: text query -> nearest images
 ```
 
-<br/>
+1. **Embed** all 500 images with CLIP ([`openai/clip-vit-base-patch32`](https://huggingface.co/openai/clip-vit-base-patch32), 512 dimensions) and L2-normalise them, so a dot product is the cosine similarity. The same is repeated with [`clip-vit-base-patch16`](https://huggingface.co/openai/clip-vit-base-patch16) for a model comparison.
+2. **Search** with exact cosine similarity over the 500 vectors, held in memory. A query image never retrieves itself.
+3. **Evaluate every image as a query** (leave-one-out). An image is *relevant* to a query if it has the same class (49 relevant images per query). Metrics: Precision@k, Recall@k, MRR and nDCG@k, against a random-ranking baseline.
+4. **KNN classification:** the K nearest neighbours vote; ties go to the nearest neighbour. Accuracy for K = 1 to 15, a confusion matrix, per-class precision and recall, and a Wilson 95% confidence interval.
+5. **Text to image:** one prompt per class ("a photo of a cat"), scored as retrieval (Precision@k, mAP, MRR) and as **zero-shot classification** (label each image with the closest prompt, using no labelled images at all).
 
----
- 
-## ✦ Architecture
- 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                       VectorView Pipeline                       │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   📁 Animal Dataset (cats / dogs / wolves)                      │
-│        │                                                        │
-│        ▼                                                        │
-│   ┌─────────────┐    CLIP Model (ViT-B/32)                      │
-│   │   Image     │ ──────────────────────────► [512-d vector]    │
-│   │   Encoder   │                                    │          │
-│   └─────────────┘                                    │          │
-│                                                      ▼          │
-│   ┌─────────────┐                         ┌──────────────────┐  │
-│   │   Text      │ ──► [512-d vector] ────►│  Vector Database │  │
-│   │   Encoder   │                         │                  │  │
-│   └─────────────┘                         │  ┌────────────┐  │  │
-│                                           │  │  Pinecone  │  │  │
-│   ┌──────────────────────────────────┐    │  └────────────┘  │  │
-│   │           Query                  │    │  ┌────────────┐  │  │
-│   │  "cute Kitty" / query_image.jpg  │    │  │  MongoDB   │  │  │
-│   └──────────────────────────────────┘    │  └────────────┘  │  │
-│             │                             └──────────────────┘  │
-│             ▼                                      │            │
-│        Cosine Similarity  ◄────────── Top-K Results (k=5)       │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
- 
-<br/>
+**About the vector databases.** The lab used Pinecone for Tasks 1 and 2 and suggested MongoDB Atlas Vector Search for Task 3. The Atlas free tier was not available to the original run, so Task 3 ran as in-memory search. The published notebook uses exact in-memory search for everything, so it runs with no accounts, and includes **optional** Pinecone and Atlas sections that switch on only when you set `PINECONE_API_KEY` / `MONGODB_URI`. Those two sections were **not executed** for the results below; the original-run screenshots further down come from the Colab run against Pinecone.
 
----
- 
-## ✦ Tasks
- 
-<summary><b>🔍 Task 1 — Image Similarity Search</b></summary>
-<br/>
-**Goal:** Given a query image, retrieve the most visually similar images from the dataset.
- 
-**How it works:**
-1. Embed the query image with CLIP into a 512-d vector
-2. Send the vector to Pinecone
-3. Pinecone computes **cosine similarity** and returns the top-K nearest neighbors
-4. Display the results alongside similarity scores
+## Results
 
-**Output:**
-<img width="1911" height="577" alt="Screenshot 2026-06-17 150443" src="https://github.com/user-attachments/assets/3b6ad443-2c7a-451e-9f9e-4c1160b61ebd" />
-<img width="1892" height="418" alt="image" src="https://github.com/user-attachments/assets/95a6da1e-f61c-4782-acbd-ff26c4c3de18" />
+All numbers are printed by the executed cells of [`notebooks/VectorView.ipynb`](notebooks/VectorView.ipynb).
 
+### Task 1: image similarity (leave-one-out over 500 queries)
 
-<summary><b>🏷️ Task 2 — Zero-Shot KNN Classification</b></summary>
-<br/>
-**Goal:** Classify an unknown image without ever training a classifier.
- 
-**How it works:**
-1. Embed the query image with CLIP
-2. Retrieve the top-K nearest neighbors from Pinecone
-3. Run a **majority vote** on neighbor labels
-4. The predicted class is the most common label among neighbors — zero training required
+| Model | P@1 | P@5 | P@10 | MRR | nDCG@10 |
+|---|---|---|---|---|---|
+| Random ranking | 0.097 | 0.096 | 0.098 | 0.251 | 0.097 |
+| **CLIP ViT-B/32** | 0.990 | 0.978 | 0.971 | 0.993 | 0.974 |
+| CLIP ViT-B/16 | 0.988 | 0.985 | 0.978 | 0.992 | 0.981 |
 
-**Output:**
-<img width="1390" height="706" alt="image" src="https://github.com/user-attachments/assets/4001723f-4545-4673-84f4-1ea57139e749" />
-<img width="1101" height="593" alt="image" src="https://github.com/user-attachments/assets/b9846aac-a331-4080-b298-f7fa83a7e9a2" />
+(Recall@10 can be at most 10/49 = 0.204 here, because each query has 49 relevant images and only 10 slots: ViT-B/32 reaches 0.198, random ranking 0.020.)
 
+![Three queries and their top-5 results](docs/images/01_task1_image_similarity.png)
 
+![Precision@5 by class for both models](docs/images/02_precision_at_5_by_class.png)
 
+The hardest classes for ViT-B/32 are Sheep (P@5 0.900) and Dog (0.924); Butterfly, Cat, Chicken, Elephant and Squirrel are 1.000.
 
-<summary><b>💬 Task 3 — Cross-Modal Search (Text → Image)</b></summary>
-<br/>
-**Goal:** Search the image dataset using natural language queries.
- 
-**How it works:**
-1. Encode a text prompt (e.g. `"wolf in snow"`) with CLIP's text encoder
-2. The text vector lands in the **same embedding space** as the images
-3. MongoDB Atlas `$vectorSearch` finds the nearest image vectors
-4. Return and display the top matching images
+### Task 2: KNN classification (K = 7, leave-one-out)
 
-**Output:**
-<img width="1448" height="517" alt="image" src="https://github.com/user-attachments/assets/f813c482-3e14-4d9c-889c-62e6f3c83ca4" />
-<img width="1476" height="533" alt="image" src="https://github.com/user-attachments/assets/a22dc9c0-0d9b-4368-a36f-f4f02782ccca" />
-<img width="1482" height="520" alt="image" src="https://github.com/user-attachments/assets/68aeaac4-8a74-40e6-9fbf-c38540d619bb" />
-<img width="1482" height="487" alt="image" src="https://github.com/user-attachments/assets/01a574c0-c94e-4fe0-a25a-12f7640eea10" />
-<img width="1488" height="547" alt="image" src="https://github.com/user-attachments/assets/3d85e56c-4b05-4d4b-93da-110c344b00a8" />
-<img width="1490" height="541" alt="image" src="https://github.com/user-attachments/assets/2b9720cc-f8d4-4723-96aa-5808534de765" />
-
-
-
----
-
-## ✦ Tech Stack
- 
-| Component | Tool | Role |
+| Model | Accuracy | 95% CI |
 |---|---|---|
-| Embedding Model | `openai/clip-vit-base-patch32` | Image + Text → 512-d Vector |
-| Vector DB (Primary) | Pinecone (Serverless) | Hosted ANN search, Tasks 1 & 2 |
-| Vector DB (Comparison) | MongoDB Atlas | Vector search via `$vectorSearch`, Task 3 |
-| Runtime | Python 3.10+, Google Colab | Development environment |
-| Visualization | Matplotlib | Display query + result images |
- 
-<br/>
+| Random guessing | 10.0% | |
+| **CLIP ViT-B/32** | **98.8%** (494 / 500) | 97.4% to 99.4% |
+| CLIP ViT-B/16 | 99.6% (498 / 500) | 98.6% to 99.9% |
 
----
+![KNN accuracy against K for both models](docs/images/03_knn_accuracy_by_k.png)
 
-## ✦ Setup
- 
-### 1. Clone the repo
- 
+![KNN confusion matrix for ViT-B/32](docs/images/04_knn_confusion_matrix.png)
+
+Accuracy hardly depends on K (ViT-B/32 for K = 1, 3, 5, 7, 9 and 15: 0.986 to 0.990). The six ViT-B/32 mistakes are Sheep predicted as Cow (3), Dog as Elephant (1), Dog as Horse (1) and Horse as Sheep (1).
+
+### Task 3: text to image
+
+With one prompt per class, retrieval is near-perfect and the same prompts classify the images without any labels:
+
+| Model | P@5 | P@10 | P@50 | MRR | mAP | Zero-shot accuracy |
+|---|---|---|---|---|---|---|
+| CLIP ViT-B/32 | 1.000 | 1.000 | 0.938 | 1.000 | 0.979 | 99.0% (495 / 500) |
+| CLIP ViT-B/16 | 1.000 | 1.000 | 0.958 | 1.000 | 0.987 | 100% (500 / 500) |
+
+![Text queries and their top-5 images](docs/images/05_task3_text_to_image.png)
+
+A deliberately vague query behaves differently: "an animal" returns a top 20 spread over six of the ten classes (Elephant 6, Chicken 4, Cow 3, Horse 3, Squirrel 3, Spider 1).
+
+<details>
+<summary>Screenshots from the original Colab run (Pinecone for Tasks 1 and 2)</summary>
+
+These are screenshots, not reproducible outputs.
+
+![Task 1: image similarity, chicken query](docs/images/original-run/task1-image-similarity-chicken.png)
+
+![Task 2: KNN classification of a butterfly](docs/images/original-run/task2-knn-classification-butterfly.png)
+
+![Task 3: horse query](docs/images/original-run/task3-text-to-image-horse.png)
+
+More are in [`docs/images/original-run/`](docs/images/original-run/).
+
+</details>
+
+## Key insights
+
+- **For this dataset the embeddings do almost all the work.** A 512-number vector from a model that never saw these labels is enough for 98.8% classification with a plain majority vote. No classifier is trained.
+- **Labels are not even needed.** Zero-shot classification from ten text prompts (99.0%) matches KNN, which uses the labels of the other 499 images (98.8%).
+- **Errors are plausible.** The mistakes concentrate on Sheep versus Cow and a few Dog images, animals that really do look alike in many photos.
+- **The bigger model is not clearly better here.** ViT-B/16 is ahead on most aggregates, but its KNN lead is 4 images out of 500 and the confidence intervals overlap. The dataset is too easy to separate the two models.
+- **At 500 vectors, a vector database is not the bottleneck.** Exact brute-force search takes about 0.1 ms per query. Approximate-nearest-neighbour indexes such as Pinecone's or Atlas's matter at far larger sizes; that was not measured here.
+- **Vague text gives scattered results.** Specific prompts work; "an animal" does not pick out any class.
+
+## Limitations and future improvements
+
+- **Easy, small, clean data.** 500 classic animal photos, 10 well-separated classes: scores are close to the ceiling, so they say little about harder problems (fine-grained breeds, noisy photos).
+- **Class-level relevance.** "Relevant" means same class, not "looks most alike", so the retrieval metrics do not capture subtler similarity.
+- **Possible overlap with CLIP's training data.** CLIP was trained on web-scale image-text pairs and these are web photos, so the scores may flatter the model.
+- **Pinecone and Atlas not measured.** The optional sections exist but were not run, so nothing here compares those services with exact search.
+- **Only two models, one embedding per image.** No fine-tuning and no trained baseline.
+- **Next steps:** run the optional sections with accounts and compare ANN against exact search (recall and latency); try a harder dataset and instance-level retrieval; add a baseline CNN or a linear classifier on the same embeddings to compare with KNN.
+
+## Installation and how to run
+
+Tested with **Python 3.15** on Windows 11, CPU only. From a fresh clone: `pip install` took 28 minutes on my connection (PyTorch and its dependencies are large downloads, and that run included retried dropped connections, so expect it to vary), and the notebook then ran in about 7 minutes, mostly embedding 500 images with two CLIP models on a CPU. The first run also downloads the two models (roughly 600 MB each) into the Hugging Face cache. Later runs reuse the embeddings cached in `data/cache/` and finish much faster.
+
 ```bash
-git clone https://github.com/your-username/vector-view.git
-cd vector-view
+git clone https://github.com/abdullahwaheed0112/VectorView.git
+cd VectorView
+python -m venv .venv
+# Windows: .venv\Scripts\activate      macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+pip install jupyterlab
+cd notebooks
+jupyter lab VectorView.ipynb
 ```
- 
-### 2. Install dependencies
- 
+
+Run from inside `notebooks/` (paths are relative). The dataset zip is extracted to `data/animal_dataset/` on first run. The notebook already contains its saved outputs, so it reads on GitHub without running.
+
+**Optional vector databases.** `pip install -r requirements-optional.txt`, then set the environment variables before starting Jupyter. Never put keys in the notebook.
+
 ```bash
-pip install torch torchvision transformers pinecone pymongo[srv] Pillow matplotlib tqdm
+# Windows PowerShell: $env:PINECONE_API_KEY = "..."   macOS/Linux: export PINECONE_API_KEY=...
+PINECONE_API_KEY   # section 7: Pinecone version of Tasks 1 and 2
+MONGODB_URI        # section 8: MongoDB Atlas $vectorSearch version of Task 3 (needs a vector search index, see the notebook)
 ```
- 
-### 3. Prepare the dataset
- 
-Organize your images like this:
- 
-```
-vector-view/
-└── animal_dataset/
-    ├── cats/
-    │   ├── cat_001.jpg
-    │   └── ...
-    ├── dogs/
-    │   ├── dog_001.jpg
-    │   └── ...
-    └── wolves/
-        ├── wolf_001.jpg
-        └── ...
-```
- 
-> In Colab: upload `animal_dataset.zip` via **Files → Upload**, then run the extraction cell.
- 
-### 4. Configure API credentials
- 
-Open the **Configuration** cell in the notebook and fill in your keys:
- 
-```python
-PINECONE_API_KEY  = "your_pinecone_key"      # app.pinecone.io
-PINECONE_ENV      = "us-east-1"              # your Pinecone region
-PINECONE_INDEX    = "animal-embeddings"      # auto-created
- 
-MONGO_URI         = "mongodb+srv://..."      # MongoDB Atlas URI
-MONGO_DB          = "your_database"
-MONGO_COLLECTION  = "animal_images"
-```
- 
-### 5. Run the notebook
- 
-Execute cells top-to-bottom in Colab or Jupyter. Each task is self-contained after setup.
- 
-<br/>
 
----
+## Project structure
 
-## ✦ Key Concepts
- 
-**Why CLIP?**
-CLIP (Contrastive Language–Image Pretraining) was trained to align image and text representations in a shared vector space. This means `encode("a dog")` and `encode(dog_image.jpg)` produce geometrically close vectors — enabling cross-modal retrieval with **zero task-specific training**.
- 
-**Why Vector Databases?**
-Traditional SQL `WHERE` clauses can't find *similar* things. Vector DBs use Approximate Nearest Neighbor (ANN) algorithms — like HNSW or IVFFlat — to find the closest vectors in milliseconds, even across millions of entries.
- 
-**Cosine Similarity:**
-```
-similarity(A, B) = (A · B) / (‖A‖ × ‖B‖)
-```
-Range `[-1, 1]` → closer to `1` = more similar.
- 
-<br/>
-
----
- 
-## ✦ Pinecone vs. MongoDB Atlas
- 
-| Feature | Pinecone | MongoDB Atlas |
-|---|---|---|
-| Type | Purpose-built vector DB | Multi-model DB + vector search |
-| Setup | Fully managed, API-first | Atlas cluster + index config |
-| Query Speed | Extremely fast (dedicated ANN) | Fast, but secondary to document ops |
-| Metadata Filtering | ✅ Native | ✅ via `$match` pipeline |
-| Best For | Pure vector workloads | Apps needing vectors + documents |
- 
-<br/>
-
----
- 
-## ✦ Observations
- 
-- CLIP embeddings are **surprisingly robust** — text queries like `"running dog"` retrieve contextually correct images with no fine-tuning
-- KNN classification via vector search **matches simple CNN accuracy** on clean datasets with zero training overhead
-- Pinecone offers faster cold-start indexing; MongoDB is preferable when your app already stores structured documents
-- Cross-modal search degrades on **ambiguous text** — `"animal"` returns scattered results across all classes
-
-<br/>
-
----
- 
-## ✦ Project Structure
- 
-```
+```text
 VectorView/
-├── VectorView.ipynb            # Main notebook
-├── animal_dataset/             # Image dataset (not tracked in git)
-├── screenshots/                # Output screenshots for README
+├── data/
+│   └── animal_dataset.zip              # 500 images, 10 classes (extracted to data/animal_dataset/ at run time)
+├── docs/
+│   └── images/                         # figures generated by the notebook
+│       └── original-run/               # screenshots of the original Colab run
+├── notebooks/
+│   └── VectorView.ipynb                # the whole project, with saved outputs
+├── requirements.txt                    # tested versions
+├── requirements-optional.txt           # Pinecone and MongoDB clients (optional sections)
 └── README.md
 ```
- 
-<br/>
 
----
+## Tech stack
 
-<div align="center">
+Python · PyTorch · Hugging Face Transformers (CLIP) · NumPy · scikit-learn · matplotlib · Pillow · Jupyter. Optional: Pinecone, MongoDB Atlas Vector Search.
 
-*A View From Vectors*
+## My role, license and contact
 
-[![GitHub](https://img.shields.io/badge/GitHub-abdullahwaheed0112-181717?style=flat-square&logo=github)](https://github.com/abdullahwaheed0112)
- 
-</div>
+- **Author:** Abdullah Waheed, BS Data Science student at FAST NUCES, Islamabad. Started as Lab 14 of the Database Lab (Spring 2026), which defined the three tasks; this repository adds the measured evaluation.
+- **Dataset:** the lab's Animal Image Dataset; source and licence not recorded (see Data).
+- **Code licence:** none chosen yet.
+- **Contact:** [GitHub](https://github.com/abdullahwaheed0112) · [LinkedIn](https://linkedin.com/in/abdullah-waheed-05a5a1416)
