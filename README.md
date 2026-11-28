@@ -46,7 +46,7 @@ It started as Lab 14 of the Database Lab (Spring 2026), which defined the three 
 4. **KNN classification:** the K nearest neighbours vote; ties go to the nearest neighbour. Accuracy for K = 1 to 15, a confusion matrix, per-class precision and recall, and a Wilson 95% confidence interval.
 5. **Text to image:** one prompt per class ("a photo of a cat"), scored as retrieval (Precision@k, mAP, MRR) and as **zero-shot classification** (label each image with the closest prompt, using no labelled images at all).
 
-**About the vector databases.** The lab used Pinecone for Tasks 1 and 2 and suggested MongoDB Atlas Vector Search for Task 3. The Atlas free tier was not available to the original run, so Task 3 ran as in-memory search. The published notebook uses exact in-memory search for everything, so it runs with no accounts, and includes **optional** Pinecone and Atlas sections that switch on only when you set `PINECONE_API_KEY` / `MONGODB_URI`. Those two sections were **not executed** for the results below; the original-run screenshots further down come from the Colab run against Pinecone.
+**About the vector databases.** The lab used Pinecone for Tasks 1 and 2 and suggested MongoDB Atlas Vector Search for Task 3. The Atlas free tier was not available to the original run, so Task 3 ran as in-memory search. The published notebook uses exact in-memory search for everything, so it runs with no accounts, and includes an **optional** Pinecone section that switches on only when you set `PINECONE_API_KEY`. That section was **not executed** for the results below; the original-run screenshots further down come from the Colab run against Pinecone.
 
 ## Results
 
@@ -116,7 +116,7 @@ More are in [`docs/images/original-run/`](docs/images/original-run/).
 - **Labels are not even needed.** Zero-shot classification from ten text prompts (99.0%) matches KNN, which uses the labels of the other 499 images (98.8%).
 - **Errors are plausible.** The mistakes concentrate on Sheep versus Cow and a few Dog images, animals that really do look alike in many photos.
 - **The bigger model is not clearly better here.** ViT-B/16 is ahead on most aggregates, but its KNN lead is 4 images out of 500 and the confidence intervals overlap. The dataset is too easy to separate the two models.
-- **At 500 vectors, a vector database is not the bottleneck.** Exact brute-force search takes about 0.1 ms per query. Approximate-nearest-neighbour indexes such as Pinecone's or Atlas's matter at far larger sizes; that was not measured here.
+- **At 500 vectors, a vector database is not the bottleneck.** Exact brute-force search takes about 0.1 ms per query. Approximate-nearest-neighbour indexes such as Pinecone's matter at far larger sizes; that was not measured here.
 - **Vague text gives scattered results.** Specific prompts work; "an animal" does not pick out any class.
 
 ## Limitations and future improvements
@@ -124,7 +124,7 @@ More are in [`docs/images/original-run/`](docs/images/original-run/).
 - **Easy, small, clean data.** 500 classic animal photos, 10 well-separated classes: scores are close to the ceiling, so they say little about harder problems (fine-grained breeds, noisy photos).
 - **Class-level relevance.** "Relevant" means same class, not "looks most alike", so the retrieval metrics do not capture subtler similarity.
 - **Possible overlap with CLIP's training data.** CLIP was trained on web-scale image-text pairs and these are web photos, so the scores may flatter the model.
-- **Pinecone and Atlas not measured.** The optional sections exist but were not run, so nothing here compares those services with exact search.
+- **Pinecone not measured.** The optional section exists but was not run, so nothing here compares it with exact search.
 - **Only two models, one embedding per image.** No fine-tuning and no trained baseline.
 - **Next steps:** run the optional sections with accounts and compare ANN against exact search (recall and latency); try a harder dataset and instance-level retrieval; add a baseline CNN or a linear classifier on the same embeddings to compare with KNN.
 
@@ -150,7 +150,6 @@ Run from inside `notebooks/` (paths are relative). The dataset zip is extracted 
 ```bash
 # Windows PowerShell: $env:PINECONE_API_KEY = "..."   macOS/Linux: export PINECONE_API_KEY=...
 PINECONE_API_KEY   # section 7: Pinecone version of Tasks 1 and 2
-MONGODB_URI        # section 8: MongoDB Atlas $vectorSearch version of Task 3 (needs a vector search index, see the notebook)
 ```
 
 ## Project structure
@@ -165,17 +164,18 @@ VectorView/
 ├── notebooks/
 │   └── VectorView.ipynb                # the whole project, with saved outputs
 ├── requirements.txt                    # tested versions
-├── requirements-optional.txt           # Pinecone and MongoDB clients (optional sections)
-└── README.md
+├── requirements-optional.txt           # Pinecone client (optional section)
+├── README.md
+└── LICENSE
 ```
 
 ## Tech stack
 
-Python · PyTorch · Hugging Face Transformers (CLIP) · NumPy · scikit-learn · matplotlib · Pillow · Jupyter. Optional: Pinecone, MongoDB Atlas Vector Search.
+Python · PyTorch · Hugging Face Transformers (CLIP) · NumPy · scikit-learn · matplotlib · Pillow · Jupyter. Optional: Pinecone.
 
 ## My role, license and contact
 
 - **Author:** Abdullah Waheed, BS Data Science student at FAST NUCES, Islamabad. Started as Lab 14 of the Database Lab (Spring 2026), which defined the three tasks; this repository adds the measured evaluation.
 - **Dataset:** the lab's Animal Image Dataset; source and licence not recorded (see Data).
-- **Code licence:** none chosen yet.
+- **Code licence:** [MIT](LICENSE), for the code only. The images are not covered (see Data).
 - **Contact:** [GitHub](https://github.com/abdullahwaheed0112) · [LinkedIn](https://linkedin.com/in/abdullah-waheed-05a5a1416)
