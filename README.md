@@ -1,11 +1,20 @@
-# VectorView: searching animal photos with CLIP embeddings
+# VectorView: finding photos by example or by description with CLIP
 
 ![Python](https://img.shields.io/badge/Python-3.15-blue?style=flat-square&logo=python)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.15-ee4c2c?style=flat-square&logo=pytorch&logoColor=white)
 ![CLIP](https://img.shields.io/badge/OpenAI-CLIP-412991?style=flat-square)
 ![Hugging Face](https://img.shields.io/badge/Transformers-5.24-yellow?style=flat-square&logo=huggingface&logoColor=black)
 
-> **Headline:** on 500 animal photos, CLIP embeddings plus nearest-neighbour search classify **98.8% of images correctly (494 of 500) with no trained classifier**, and plain text prompts alone reach **99.0%**. Image-to-image retrieval returns a same-class image in the top 5 at a precision of 0.978 (random ranking: 0.096).
+**98.8% of 500 animal photos classified correctly by nearest-neighbour search, with no classifier trained.**
+
+| | |
+|---|---|
+| **Problem** | Keyword search cannot find images that merely look alike, and labelling every new image by hand does not scale. |
+| **Solution** | Turned images and text into CLIP embeddings and searched them by cosine similarity: image-to-image, KNN voting and text-to-image. |
+| **Result** | **494 of 500 correct (KNN, leave-one-out); precision@5 of 0.978 against 0.096 for random ranking.** An easy, small dataset, so scores sit near the ceiling. |
+| **My role** | Solo lab assignment (Database Lab), extended with measured evaluation. |
+
+![Three queries and their five closest images](docs/images/01_task1_image_similarity.png)
 
 ## Problem statement
 
@@ -61,8 +70,6 @@ All numbers are printed by the executed cells of [`notebooks/VectorView.ipynb`](
 | CLIP ViT-B/16 | 0.988 | 0.985 | 0.978 | 0.992 | 0.981 |
 
 (Recall@10 can be at most 10/49 = 0.204 here, because each query has 49 relevant images and only 10 slots: ViT-B/32 reaches 0.198, random ranking 0.020.)
-
-![Three queries and their top-5 results](docs/images/01_task1_image_similarity.png)
 
 ![Precision@5 by class for both models](docs/images/02_precision_at_5_by_class.png)
 
