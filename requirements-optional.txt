@@ -1,4 +1,3 @@
-# Only needed for the optional sections at the end of the notebook (they need your own accounts).
-# These were not executed in the published run, so no versions are pinned.
+# Only needed for the optional section near the end of the notebook (it needs your own account).
+# It was not executed in the published run, so no versions are pinned.
 pinecone          # section 7: Pinecone vector database (set PINECONE_API_KEY)
-pymongo[srv]      # section 8: MongoDB Atlas Vector Search (set MONGODB_URI)
