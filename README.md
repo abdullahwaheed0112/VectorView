@@ -165,7 +165,8 @@ VectorView/
 │   └── VectorView.ipynb                # the whole project, with saved outputs
 ├── requirements.txt                    # tested versions
 ├── requirements-optional.txt           # Pinecone client (optional section)
-└── README.md
+├── README.md
+└── LICENSE
 ```
 
 ## Tech stack
@@ -176,5 +177,5 @@ Python · PyTorch · Hugging Face Transformers (CLIP) · NumPy · scikit-learn �
 
 - **Author:** Abdullah Waheed, BS Data Science student at FAST NUCES, Islamabad. Started as Lab 14 of the Database Lab (Spring 2026), which defined the three tasks; this repository adds the measured evaluation.
 - **Dataset:** the lab's Animal Image Dataset; source and licence not recorded (see Data).
-- **Code licence:** none chosen yet.
+- **Code licence:** [MIT](LICENSE), for the code only. The images are not covered (see Data).
 - **Contact:** [GitHub](https://github.com/abdullahwaheed0112) · [LinkedIn](https://linkedin.com/in/abdullah-waheed-05a5a1416)
